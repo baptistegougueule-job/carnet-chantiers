@@ -162,6 +162,57 @@ select.sm,input.sm{padding:6px 8px;border:1px solid var(--line);border-radius:6p
 <datalist id="dl-fourn"></datalist>
 <datalist id="dl-units"><option value="pce"><option value="m"><option value="m²"><option value="m³"><option value="kg"><option value="sac"><option value="L"><option value="boîte"><option value="rouleau"><option value="lot"></datalist>
 
+<!-- INTEGRATION FIREBASE DIRECTE DANS L'APPLICATION -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+import { 
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCiH_o90ppMTM-s9ROcSnpwmkYHA3XRpWM",
+  authDomain: "carnet-chantiers-98241.firebaseapp.com",
+  databaseURL: "https://carnet-chantiers-98241-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "carnet-chantiers-98241",
+  storageBucket: "carnet-chantiers-98241.firebasestorage.app",
+  messagingSenderId: "424552463805",
+  appId: "1:424552463805:web:1be259209726d3e9a6e6d4"
+};
+
+const app = initializeApp(firebaseConfig);
+const dbFS = getFirestore(app);
+
+// Adaptation de l'interface Firestore vers les méthodes utilisées par l'application
+window.appDb = {
+  collection: (colName) => ({
+    add: async (data) => {
+      const colRef = collection(dbFS, colName);
+      const res = await addDoc(colRef, data);
+      return { id: res.id };
+    },
+    onSnapshot: (callback, errCallback) => {
+      return onSnapshot(collection(dbFS, colName), (snap) => {
+        const docs = snap.docs.map(d => ({ id: d.id, data: () => d.data() }));
+        callback({ docs });
+      }, errCallback);
+    }
+  }),
+  doc: (path) => ({
+    update: (data) => updateDoc(doc(dbFS, path), data),
+    delete: () => deleteDoc(doc(dbFS, path)),
+    set: (data) => setDoc(doc(dbFS, path), data),
+    onSnapshot: (callback, errCallback) => {
+      return onSnapshot(doc(dbFS, path), (snap) => {
+        callback({ exists: snap.exists(), data: () => snap.data() });
+      }, errCallback);
+    }
+  })
+};
+
+// Lancement direct de l'initialisation de l'application
+if (window.initApp) window.initApp();
+</script>
+
 <script>
 const BASE_STATUS = {devis:"Devis",planifie:"Planifié",encours:"En cours",attente:"En attente",termine:"Terminé"};
 const STATUS = {...BASE_STATUS};
@@ -394,7 +445,7 @@ function viewPlanning(){
       </li>`;}).join("")}</ul></section>`;
   });
   const un = (plan.unplanned||[]).map(u=>({...u, t:S.tasks[u.taskId] || S.items[u.taskId]})).filter(u=>u.t);
-  if (un.length) html += `<section class="group"><h3><span>Pas casé cette semaine</span><span class="sub">${un.length}</span></h3><ul class="rows">${un.map(u=>`<li class="row"><div class="body"><div class="title" style="cursor:default">${esc(u.t.title||u.t.name)}</div>${u.reason?`<div class="hint">${esc(u.reason)}</div>`:""}</div></li>`).join("")}</ul></section>`;
+  if (un.length) html += `<section class="group"><h3><span>Pas casé cette semaine</span><span class="sub">${un.length}</span></h3><ul class="rows">${un.map(u=>`<li class="row"><div class="body"><div class="title" style="cursor:default">${esc(u.t.title\vert{}\vert{}u.t.name)}</div>${u.reason?`<div class="hint">${esc(u.reason)}</div>`:""}</div></li>`).join("")}</ul></section>`;
   return html;
 }
 
@@ -569,304 +620,4 @@ function viewProjet(){
     <button class="btn ghost back" data-nav="projets">← Projets</button>
     <div class="bar"><h2>${esc(p.name)}</h2><div class="left"><span class="pill st-${p.status||"devis"}">${STATUS[p.status]||"Devis"}</span><button class="btn" data-act="edit-project" data-id="${p.id}">Modifier</button></div></div>
     <div class="kv">
-      <span>Client <b>${c?`<button class="chip link" data-act="edit-client" data-id="${c.id}">${esc(c.name)}</button>`:"—"}</b></span>
-      ${p.location?`<span>Lieu <b>${esc(p.location)}</b></span>`:""}
-      ${p.start?`<span>Du <b>${fmtDate(p.start)}</b>${p.end?` au <b>${fmtDate(p.end)}</b>`:""}</span>`:""}
-      <span>Temps prévu <b class="num">${fmtTotal(st.hours)}</b></span>
-      <span>Budget matériel <b class="num">${eur(st.budget)}</b></span>
-    </div>
-    ${p.notes?`<p class="hint" style="margin:0;max-width:70ch">${esc(p.notes)}</p>`:""}
-  </div>
-  <div class="sections">
-    <div class="col">
-      <div class="sec-h"><h3>Tâches</h3><span class="hint num">${st.done}/${st.tasks} faites</span></div>
-      <section class="group">${tasksHtml}
-        <form class="quick" data-quick="task" data-project="${p.id}">
-          <input class="grow" name="title" placeholder="Nouvelle tâche" required aria-label="Nouvelle tâche" id="q-task">
-          <input name="type" list="dl-types" placeholder="Type" aria-label="Type" style="width:130px" id="q-type">
-          <input name="location" list="dl-lieux" placeholder="Lieu (si autre)" aria-label="Lieu" style="width:130px" id="q-loc">
-          <select name="dur" aria-label="Durée" id="q-dur">${durOptions("").map(([v,l])=>`<option value="${v}">${l}</option>`).join("")}</select>
-          <button>Ajouter</button></form>
-      </section>
-    </div>
-    <div class="col">
-      <div class="sec-h"><h3>Matériel à acheter</h3><span class="hint num">${st.toBuy} restant${st.toBuy>1?"s":""}</span></div>
-      <section class="group">
-        ${mat.length?`<ul class="rows">${mat.map(itemRow).join("")}</ul>
-          <div class="total"><span>Reste à acheter</span><b>${eur(st.budgetLeft)}</b></div>`:`<p class="hint" style="padding:12px 14px;margin:0">Listez ici tout ce qu'il faut acheter pour ce chantier.</p>`}
-        <form class="quick" data-quick="materiel" data-project="${p.id}">
-          <input class="qty" name="qty" inputmode="decimal" placeholder="Qté" aria-label="Quantité" id="q-qty">
-          <input class="unit" name="unit" list="dl-units" placeholder="Unité" aria-label="Unité" id="q-unit">
-          <input class="grow" name="name" placeholder="Article" required aria-label="Article" id="q-name">
-          <input name="supplier" list="dl-fourn" placeholder="Fournisseur" aria-label="Fournisseur" style="width:120px" id="q-sup">
-          <input class="price" name="price" inputmode="decimal" placeholder="Prix/u €" aria-label="Prix unitaire" id="q-price">
-          <button>Ajouter</button></form>
-      </section>
-      <div class="sec-h"><h3>Outillage nécessaire</h3><span class="hint num">${st.outilsReady}/${st.outils} prêts</span></div>
-      <section class="group">
-        ${outils.length?`<ul class="rows">${outils.map(itemRow).join("")}</ul>`:`<p class="hint" style="padding:12px 14px;margin:0">Les outils à charger dans la camionnette.</p>`}
-        <form class="quick" data-quick="outil" data-project="${p.id}">
-          <input class="grow" name="name" placeholder="Outil" required aria-label="Outil" id="q-outil">
-          <input class="qty" name="qty" inputmode="numeric" placeholder="Qté" aria-label="Quantité" id="q-oqty">
-          <button>Ajouter</button></form>
-      </section>
-    </div>
-  </div>`;
-}
-
-function viewClients(){
-  let html = `<div class="bar"><span class="hint">Coordonnées et projets de chaque client.</span><button class="btn primary" data-act="new-client">+ Client</button></div>`;
-  const cs = vals(S.clients).sort((a,b)=>byName(a.name,b.name));
-  if (!cs.length) return html + `<div class="empty"><strong>${S.loaded?"Aucun client":"Chargement…"}</strong>Ajoutez vos clients pour y rattacher leurs projets.</div>`;
-  html += `<div class="cards">` + cs.map(c=>{
-    const ps = vals(S.projects).filter(p=>p.clientId===c.id).sort((a,b)=>byName(a.name,b.name));
-    return `<div class="card" data-act="edit-client" data-id="${c.id}" role="button" tabindex="0">
-      <div class="line"><h3>${esc(c.name)}</h3>${c.example?`<span class="chip">exemple</span>`:""}</div>
-      <div class="contact">${c.phone?`<span>${esc(c.phone)}</span>`:""}${c.email?`<span>${esc(c.email)}</span>`:""}${c.address?`<span class="small">${esc(c.address)}</span>`:""}</div>
-      ${ps.length?`<div class="meta">${ps.map(p=>`<button class="chip link" data-open-project="${p.id}">${esc(p.name)} · ${STATUS[p.status]||"Devis"}</button>`).join("")}</div>`:`<span class="small">Aucun projet</span>`}
-    </div>`;}).join("") + `</div>`;
-  return html;
-}
-
-function viewAchats(){
-  const mat = vals(S.items).filter(i=>i.kind==="materiel" && !i.done && activeProj(proj(i.projectId)));
-  const outils = vals(S.items).filter(i=>i.kind==="outil" && !i.done && activeProj(proj(i.projectId)));
-  let html = `<div class="bar"><span class="hint">Tout ce qui reste à acheter et à préparer, pour les projets non terminés.</span></div>`;
-  html += `<div class="sections"><div class="col"><div class="sec-h"><h3>À acheter, par fournisseur</h3><span class="hint num">${eur(mat.reduce((s,i)=>s+num(i.qty||1)*num(i.price),0))}</span></div>`;
-  if (!mat.length) html += `<div class="empty"><strong>Rien à acheter</strong>Le matériel ajouté dans vos projets apparaîtra ici.</div>`;
-  const g = new Map(); mat.forEach(i=>{ const k=(i.supplier||"").trim()||"Fournisseur non précisé"; if(!g.has(k)) g.set(k,[]); g.get(k).push(i); });
-  [...g.entries()].sort((a,b)=>(a[0]==="Fournisseur non précisé")-(b[0]==="Fournisseur non précisé")||byName(a[0],b[0])).forEach(([k,l])=>{
-    const tot = l.reduce((s,i)=>s+num(i.qty||1)*num(i.price),0);
-    html += `<section class="group"><h3><span>${esc(k)}</span><span class="sub num">${eur(tot)}</span></h3><ul class="rows">${l.sort((a,b)=>byName(a.name,b.name)).map(i=>{
-      const p = proj(i.projectId);
-      return `<li class="row"><input type="checkbox" class="check" aria-label="Acheté" data-act="toggle" data-col="items" data-id="${i.id}">
-        <span class="qtycol">${esc(i.qty||"")} ${esc(i.unit||"")}</span>
-        <div class="body"><button class="title" data-act="edit-item" data-id="${i.id}">${esc(i.name)}</button><div class="meta"><button class="chip link" data-open-project="${p.id}">${esc(p.name)}</button></div></div>
-        <span class="price">${i.price?eur(num(i.qty||1)*num(i.price)):""}</span></li>`;}).join("")}</ul></section>`;
-  });
-  html += `</div><div class="col"><div class="sec-h"><h3>Outillage à préparer</h3><span class="hint num">${outils.length}</span></div>`;
-  if (!outils.length) html += `<div class="empty"><strong>Tout est prêt</strong>Les outils non cochés de vos projets apparaîtront ici.</div>`;
-  const go = new Map(); outils.forEach(i=>{ if(!go.has(i.projectId)) go.set(i.projectId,[]); go.get(i.projectId).push(i); });
-  [...go.entries()].sort((a,b)=>byName(proj(a[0]).name,proj(b[0]).name)).forEach(([pid,l])=>{
-    const p = proj(pid);
-    html += `<section class="group"><h3><button class="title" data-open-project="${pid}" style="font:inherit;background:none;border:0;padding:0;cursor:pointer">${esc(p.name)}</button><span class="sub">${p.location?'<span class="loc"></span>'+esc(p.location):""}</span></h3><ul class="rows">${l.sort((a,b)=>byName(a.name,b.name)).map(itemRow).join("")}</ul></section>`;
-  });
-  return html + `</div></div>`;
-}
-
-/* ---------- panneau d'édition ---------- */
-let sheetSubmit = null, sheetDelete = null;
-function field(label, name, value, opts={}){
-  const id = "s-"+name;
-  if (opts.type==="select") return `<div class="field"><label for="${id}">${label}</label><select id="${id}" name="${name}">${opts.options.map(([v,l])=>`<option value="${esc(v)}" ${String(v)===String(value??"")?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`;
-  if (opts.type==="textarea") return `<div class="field"><label for="${id}">${label}</label><textarea id="${id}" name="${name}" placeholder="${esc(opts.ph||"")}">${esc(value)}</textarea></div>`;
-  return `<div class="field"><label for="${id}">${label}</label><input id="${id}" name="${name}" type="${opts.type||"text"}" value="${esc(value)}" ${opts.list?`list="${opts.list}"`:""} ${opts.required?"required":""} ${opts.inputmode?`inputmode="${opts.inputmode}"`:""} placeholder="${esc(opts.ph||"")}"></div>`;
-}
-function openSheet(title, body, onSubmit, onDelete, extra=""){
-  sheetSubmit = onSubmit; sheetDelete = onDelete;
-  $("#sheetHost").innerHTML = `<div class="scrim" data-sheet="close"></div>
-    <aside class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
-      <header><h2>${esc(title)}</h2><button class="btn ghost" data-sheet="close" aria-label="Fermer">✕</button></header>
-      <form id="sheetForm">${body}${extra}</form>
-      <footer>${onDelete?`<button class="btn danger" data-sheet="delete" type="button">Supprimer</button>`:"<span></span>"}
-        <div class="r"><button class="btn" data-sheet="close" type="button">Annuler</button><button class="btn primary" type="submit" form="sheetForm">Enregistrer</button></div></footer>
-    </aside>`;
-  setTimeout(()=>{ const f = $("#sheetForm input, #sheetForm select"); f && f.focus(); }, 30);
-}
-function closeSheet(){ $("#sheetHost").innerHTML = ""; sheetSubmit = sheetDelete = null; if (pending) render(); }
-
-const projectOptions = (cur) => [["","— Aucun —"], ...vals(S.projects).filter(p=>activeProj(p)||p.id===cur).sort((a,b)=>byName(a.name,b.name)).map(p=>[p.id,p.name])];
-const clientOptions = () => [["","— Aucun —"], ...vals(S.clients).sort((a,b)=>byName(a.name,b.name)).map(c=>[c.id,c.name])];
-
-function taskSheet(t, defaults={}){
-  t = t || {projectId: defaults.projectId || S.taskProject || (S.view==="projet"?S.projectId:""), done:false};
-  const p = proj(t.projectId);
-  openSheet(t.id?"Modifier la tâche":"Nouvelle tâche",
-    field("Tâche","title",t.title,{required:true,ph:"Ex. Poser les prises cuisine"}) +
-    field("Projet","projectId",t.projectId,{type:"select",options:projectOptions(t.projectId)}) +
-    `<div class="pair">${field("Type","type",t.type,{list:"dl-types",ph:"Électricité…"})}${field("Échéance","due",t.due,{type:"date"})}</div>` +
-    field("Durée estimée","dur",durKey(t),{type:"select",options:durOptions(durKey(t))}) +
-    field("Lieu","location",t.location,{list:"dl-lieux",ph:p?.location?`Par défaut : ${p.location}`:"Adresse, commune, pièce…"}) +
-    `<p class="hint" style="margin:-6px 0 0">Laissez vide pour utiliser le lieu du projet.</p>` +
-    field("Notes","notes",t.notes,{type:"textarea"}) +
-    field("Statut","done",t.done?"1":"",{type:"select",options:[["","À faire"],["1","Faite"]]}),
-    f=>{ const d={...parseDur(f.dur),title:f.title.trim(),projectId:f.projectId,type:f.type.trim(),due:f.due,location:f.location.trim(),notes:f.notes.trim(),done:!!f.done};
-         t.id ? patch("tasks",t.id,d) : add("tasks",d); },
-    t.id ? ()=>remove("tasks",t.id) : null);
-}
-async function createClient(data){
-  const id = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-  const doc = {...data, createdAt: Date.now()};
-  if (db){ try{ await db.doc("clients/"+id).set(doc); }catch(e){ fail(e); return ""; } }
-  else { S.clients[id] = {id, ...doc}; }
-  return id;
-}
-function projectSheet(p){
-  p = p || {status:"devis"};
-  const tsCount = p.id ? vals(S.tasks).filter(t=>t.projectId===p.id).length + vals(S.items).filter(i=>i.projectId===p.id).length : 0;
-  openSheet(p.id?"Modifier le projet":"Nouveau projet",
-    field("Nom du projet","name",p.name,{required:true,ph:"Ex. Rénovation salle de bain"}) +
-    field("Client","clientId", p.clientId || (vals(S.clients).length ? "" : "__new"), {type:"select",options:[...clientOptions(), ["__new","+ Nouveau client…"]]}) +
-    `<div id="newClientBox" class="newclient" ${(p.clientId || vals(S.clients).length) ? "hidden" : ""}>
-       ${field("Nom du nouveau client","ncName","",{ph:"Nom ou société"})}
-       <div class="pair">${field("Téléphone","ncPhone","",{type:"tel"})}${field("E-mail","ncEmail","",{type:"email"})}</div>
-       ${field("Adresse","ncAddress","",{ph:"Rue, code postal, commune"})}
-       <p class="hint" style="margin:0">Le client sera créé en même temps que le projet. Si le lieu du chantier est vide, son adresse sera utilisée.</p>
-     </div>` +
-    field("Lieu du chantier","location",p.location,{list:"dl-lieux",ph:"Rue, commune"}) +
-    field("Statut","status",p.status,{type:"select",options:Object.entries(STATUS)}) +
-    `<div class="pair">${field("Début","start",p.start,{type:"date"})}${field("Fin prévue","end",p.end,{type:"date"})}</div>` +
-    field("Notes","notes",p.notes,{type:"textarea",ph:"Accès, code porte, remarques du client…"}),
-    async f=>{ let clientId = f.clientId, location = f.location.trim();
-         if (clientId === "__new"){
-           const nm = (f.ncName||"").trim();
-           clientId = nm ? await createClient({name:nm, phone:(f.ncPhone||"").trim(), email:(f.ncEmail||"").trim(), address:(f.ncAddress||"").trim(), notes:""}) : "";
-           if (!location) location = (f.ncAddress||"").trim();
-         }
-         const d={name:f.name.trim(),clientId,location,status:f.status,start:f.start,end:f.end,notes:f.notes.trim()};
-         p.id ? patch("projects",p.id,d) : add("projects",d); },
-    p.id ? async ()=>{ for (const t of vals(S.tasks).filter(t=>t.projectId===p.id)) await remove("tasks",t.id);
-                       for (const i of vals(S.items).filter(i=>i.projectId===p.id)) await remove("items",i.id);
-                       await remove("projects",p.id); if (S.projectId===p.id) go("projets"); } : null,
-    p.id && tsCount ? `<p class="hint">Supprimer ce projet supprime aussi ses ${tsCount} tâches et articles.</p>` : "");
-}
-function clientSheet(c){
-  c = c || {};
-  openSheet(c.id?"Fiche client":"Nouveau client",
-    field("Nom","name",c.name,{required:true,ph:"Nom ou société"}) +
-    `<div class="pair">${field("Téléphone","phone",c.phone,{type:"tel"})}${field("E-mail","email",c.email,{type:"email"})}</div>` +
-    field("Adresse","address",c.address,{ph:"Rue, code postal, commune"}) +
-    field("Notes","notes",c.notes,{type:"textarea",ph:"TVA, préférences, disponibilités…"}),
-    f=>{ const d={name:f.name.trim(),phone:f.phone.trim(),email:f.email.trim(),address:f.address.trim(),notes:f.notes.trim()};
-         c.id ? patch("clients",c.id,d) : add("clients",d); },
-    c.id ? async ()=>{ for (const p of vals(S.projects).filter(p=>p.clientId===c.id)) await patch("projects",p.id,{clientId:""}); await remove("clients",c.id); } : null,
-    c.id ? `<p class="hint">Supprimer un client garde ses projets, sans client associé.</p>` : "");
-}
-function itemSheet(i){
-  const mat = i.kind==="materiel";
-  openSheet(mat?"Article à acheter":"Outil",
-    field("Catégorie","kind",i.kind,{type:"select",options:[["materiel","Matériel à acheter"],["outil","Outillage"]]}) +
-    field(mat?"Article":"Outil","name",i.name,{required:true}) +
-    `<div class="pair">${field("Quantité","qty",i.qty,{inputmode:"decimal"})}${field("Unité","unit",i.unit,{list:"dl-units"})}</div>` +
-    `<div class="pair">${field("Fournisseur","supplier",i.supplier,{list:"dl-fourn"})}${field("Prix unitaire (€)","price",i.price,{inputmode:"decimal"})}</div>` +
-    field("Projet","projectId",i.projectId,{type:"select",options:projectOptions(i.projectId).slice(1)}) +
-    field("Notes","notes",i.notes,{type:"textarea"}) +
-    field("Statut","done",i.done?"1":"",{type:"select",options:mat?[["","À acheter"],["1","Acheté"]]:[["","À préparer"],["1","Prêt"]]}),
-    f=>patch("items",i.id,{kind:f.kind,name:f.name.trim(),qty:f.qty.trim(),unit:f.unit.trim(),supplier:f.supplier.trim(),price:f.price.trim()?num(f.price):"",projectId:f.projectId,notes:f.notes.trim(),done:!!f.done}),
-    ()=>remove("items",i.id));
-}
-
-/* ---------- navigation & événements ---------- */
-function go(view, projectId){
-  S.view = view; S.projectId = projectId || null;
-  try{ history.replaceState(null,"", "#"+(view==="projet"?"projet-"+projectId:view)); }catch(e){}
-  render(); window.scrollTo(0,0);
-}
-document.addEventListener("click", e=>{
-  const t = e.target.closest("[data-nav],[data-open-project],[data-act],[data-set],[data-sheet]");
-  if (!t) return;
-  if (t.dataset.sheet==="close") return closeSheet();
-  if (t.dataset.sheet==="delete"){
-    if (!t.classList.contains("armed")){ t.classList.add("armed"); t.textContent="Confirmer la suppression"; return; }
-    const fn = sheetDelete; closeSheet(); fn && fn(); return;
-  }
-  if (t.dataset.nav) return go(t.dataset.nav);
-  if (t.dataset.openProject){ e.stopPropagation(); return go("projet", t.dataset.openProject); }
-  if (t.dataset.set){ S[t.dataset.set] = t.dataset.val; return render(); }
-  const id = t.dataset.id;
-  switch (t.dataset.act){
-    case "toggle": { const col=t.dataset.col; patch(col,id,{done:t.checked}); break; }
-    case "move-up": moveTask(id,-1); break;
-    case "move-down": moveTask(id,1); break;
-    case "edit-task": taskSheet(S.tasks[id]); break;
-    case "new-task": taskSheet(null); break;
-    case "edit-item": itemSheet(S.items[id]); break;
-    case "new-project": projectSheet(null); break;
-    case "edit-project": projectSheet(S.projects[id]); break;
-    case "new-client": clientSheet(null); break;
-    case "edit-client": clientSheet(S.clients[id]); break;
-    case "backup": backupSheet(); break;
-    case "plan-send": sendPlan(id); break;
-    case "plan-toggle": togglePlanBlock(id, +t.dataset.i); break;
-    case "plan-week": if (t.dataset.val){ S.planWeek = t.dataset.val; S.calMsg = null; render(); } break;
-    case "cal-dismiss": S.calMsg = null; render(); break;
-    case "dismiss": S.error=null; render(); break;
-    case "clear-examples": (async()=>{ for (const c of COLS) for (const d of vals(S[c]).filter(d=>d.example)) await remove(c,d.id); })(); break;
-  }
-});
-document.addEventListener("keydown", e=>{
-  if (e.key==="Escape" && sheetSubmit) closeSheet();
-  if ((e.key==="Enter"||e.key===" ") && e.target.matches(".card[data-act]")){ e.preventDefault(); e.target.click(); }
-});
-document.addEventListener("change", e=>{
-  if (e.target.id==="s-clientId"){ const box=$("#newClientBox"); if (box){ box.hidden = e.target.value!=="__new"; if(!box.hidden){ const n=$("#s-ncName"); n&&n.focus(); } } }
-  if (e.target.dataset.setSelect){ S[e.target.dataset.setSelect] = e.target.value; render(); }
-});
-document.addEventListener("submit", e=>{
-  e.preventDefault();
-  const f = e.target;
-  if (f.id==="sheetForm"){ const d = Object.fromEntries(new FormData(f)); const fn = sheetSubmit; closeSheet(); fn && fn(d); return; }
-  const q = f.dataset.quick; if (!q) return;
-  const d = Object.fromEntries(new FormData(f)), pid = f.dataset.project;
-  const focusId = (f.querySelector(q==="materiel"?"[name=qty]":"input")||{}).id;
-  f.reset();
-  const done = q==="task"
-    ? add("tasks",{title:d.title.trim(),type:d.type.trim(),location:d.location.trim(),...parseDur(d.dur),projectId:pid,done:false,due:"",notes:""})
-    : add("items",{kind:q,name:d.name.trim(),qty:(d.qty||"").trim(),unit:(d.unit||"").trim(),supplier:(d.supplier||"").trim(),price:d.price?num(d.price):"",projectId:pid,done:false,notes:""});
-  const refocus = ()=>{ render(); const el = focusId && document.getElementById(focusId); el && el.focus(); };
-  refocus(); Promise.resolve(done).then(()=>setTimeout(refocus,60));
-});
-$("#main").addEventListener("focusout", ()=>setTimeout(()=>{ if (pending && !typing()) render(); }, 0));
-
-/* ---------- démarrage ---------- */
-$("#today").textContent = new Date().toLocaleDateString("fr-BE",{weekday:"long",day:"numeric",month:"long"});
-(function(){ const h = (location.hash||"").slice(1);
-  if (h.startsWith("projet-")){ S.view="projet"; S.projectId=h.slice(7); }
-  else if (["planning","taches","projets","clients","achats"].includes(h)) S.view=h; })();
-render();
-
-(async ()=>{
-  try { db = await window.claude?.use?.("db"); } catch(e){ db = null; }
-  if (!db){ S.loaded = true; S.error = "Cette vue ne peut pas enregistrer : vos saisies seront perdues à la fermeture."; render(); return; }
-  const got = new Set();
-  COLS.forEach(c=>{
-    db.collection(c).onSnapshot(snap=>{
-      const next = {}; snap.docs.forEach(d=>{ next[d.id] = {id:d.id, ...d.data()}; });
-      S[c] = next; got.add(c); if (got.size===COLS.length) S.loaded = true;
-      scheduleRender();
-    }, err=>{ S.error = "La connexion aux données est interrompue. Rechargez la page."; render(); });
-  });
-  db.collection("plans").onSnapshot(snap=>{
-    const next = {}; snap.docs.forEach(d=>{ next[d.id] = {id:d.id, ...d.data()}; });
-    S.plans = next; scheduleRender();
-  }, ()=>{});
-  db.doc("settings/main").onSnapshot(d=>{ S.settings = d.exists ? d.data() : null; scheduleRender(); }, ()=>{});
-})();
-</script>
-HTML
-<script type="module">
-  // Importation des modules via les liens CDN complets
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-analytics.js";
-
-  // Ta configuration Firebase exacte
-  const firebaseConfig = {
-    apiKey: "AIzaSyCiH_o90ppMTM-s9ROcSnpwmkYHA3XRpWM",
-    authDomain: "carnet-chantiers-98241.firebaseapp.com",
-    databaseURL: "https://carnet-chantiers-98241-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "carnet-chantiers-98241",
-    storageBucket: "carnet-chantiers-98241.firebasestorage.app",
-    messagingSenderId: "424552463805",
-    appId: "1:424552463805:web:1be259209726d3e9a6e6d4",
-    measurementId: "G-0DCKPTFDNX"
-  };
-
-  // Initialisation des services
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const analytics = getAnalytics(app);
-
-  console.log("La connexion à Firestore est établie.");
-</script>
-</body></html>
+      <span>Client <b>${c?`<button class="chip link" data-act="edit-client" data-id="${c.id}">${esc(c.name
