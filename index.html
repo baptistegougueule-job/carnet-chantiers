@@ -843,5 +843,30 @@ render();
   db.doc("settings/main").onSnapshot(d=>{ S.settings = d.exists ? d.data() : null; scheduleRender(); }, ()=>{});
 })();
 </script>
+HTML
+<script type="module">
+  // Importation des modules via les liens CDN complets
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-analytics.js";
 
+  // Ta configuration Firebase exacte
+  const firebaseConfig = {
+    apiKey: "AIzaSyCiH_o90ppMTM-s9ROcSnpwmkYHA3XRpWM",
+    authDomain: "carnet-chantiers-98241.firebaseapp.com",
+    databaseURL: "https://carnet-chantiers-98241-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "carnet-chantiers-98241",
+    storageBucket: "carnet-chantiers-98241.firebasestorage.app",
+    messagingSenderId: "424552463805",
+    appId: "1:424552463805:web:1be259209726d3e9a6e6d4",
+    measurementId: "G-0DCKPTFDNX"
+  };
+
+  // Initialisation des services
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const analytics = getAnalytics(app);
+
+  console.log("La connexion à Firestore est établie.");
+</script>
 </body></html>
